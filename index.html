@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" style="font-size: 81%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק זיכרון - חגי תשרי</title>
+    <!-- Tailwind CSS for modern responsive layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti library for victory and match celebration effects -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Google Font Assistant -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Assistant', sans-serif;
+            background: linear-gradient(135deg, #fffcf0 0%, #ffedd5 40%, #fde68a 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Float animations for background elements */
+        .float-fast { animation: floatAnim 3s ease-in-out infinite; }
+        .float-slow { animation: floatAnim 5s ease-in-out infinite alternate; }
+        
+        @keyframes floatAnim {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(3deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        /* 3D Card Animation CSS Styles */
+        .card-container {
+            perspective: 810px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+            cursor: pointer;
+        }
+
+        .card-container.flipped .card-inner,
+        .card-container.matched .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-front {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.8), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background-image: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.08) 0, rgba(245, 158, 11, 0.08) 3px, transparent 3px, transparent 10px);
+        }
+
+        .card-front::after {
+            content: '🍯';
+            font-size: 2rem;
+            opacity: 0.6;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+            background: #ffffff;
+            border: 2px solid #fbbf24;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-container.matched .card-inner {
+            animation: matchPulse 0.6s ease-in-out;
+        }
+
+        @keyframes matchPulse {
+            0% { transform: rotateY(180deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.1); }
+            100% { transform: rotateY(180deg) scale(1); }
+        }
+
+        /* Custom Scrollbar for image selector */
+        .custom-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(254, 243, 199, 0.5);
+            border-radius: 10px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #d97706;
+            border-radius: 10px;
+            border: 2px solid #fef3c7;
+        }
+
+        /* Custom Toggle Switch styling */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #d97706;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #f59e0b;
+        }
+
+        .svg-icon-wrapper svg {
+            width: 100%;
+            height: 100%;
+            max-width: 85%;
+            max-height: 85%;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen text-slate-800 antialiased p-3 sm:p-6 relative">
+
+    <div id="toast-message" class="fixed top-6 left-1/2 transform -translate-x-1/2 -translate-y-[150%] opacity-0 transition-all duration-300 z-50 bg-red-100 border-2 border-red-400 text-red-800 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 font-bold">
+        <span class="text-2xl">⚠️</span>
+        <span id="toast-text"></span>
+    </div>
+
+    <!-- Ambient Floating Decorations -->
+    <div class="fixed top-10 right-10 text-4xl opacity-40 float-slow pointer-events-none hidden md:block">🍎</div>
+    <div class="fixed bottom-20 left-10 text-5xl opacity-40 float-fast pointer-events-none hidden md:block">🍯</div>
+    <div class="fixed top-1/4 left-20 text-3xl opacity-30 float-slow pointer-events-none hidden md:block">🌿</div>
+
+    <div class="max-w-5xl mx-auto w-full flex-grow flex flex-col relative z-10">
+        
+        <header class="text-center my-4 sm:my-6 relative">
+            <h1 class="text-4xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-l from-amber-700 via-amber-600 to-yellow-600 tracking-tight drop-shadow-sm pb-2">
+                משחק זיכרון - חגי תשרי
+            </h1>
+        </header>
+
+        <!-- SCREEN 1: GAME SETUP & OPTIONS -->
+        <div id="screen-1" class="bg-white/80 backdrop-blur-xl rounded-[2rem] p-6 sm:p-10 shadow-2xl border border-white/60 flex flex-col gap-8 my-auto relative">
+            <div class="text-center border-b border-amber-100 pb-4">
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-950 flex items-center justify-center gap-2">
+                    <span>⚙️</span> הגדרות המשחק
+                </h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Game Mode Selection (1 Player vs 2 Players) -->
+                <div class="bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 rounded-2xl border border-amber-200/70 shadow-sm flex flex-col gap-3">
+                    <label class="font-extrabold text-amber-950 text-xl flex items-center gap-2">
+                        <span class="bg-amber-200 p-2 rounded-lg text-lg">👥</span> אופן המשחק:
+                    </label>
+                    <div class="grid grid-cols-2 gap-3 mt-1">
+                        <button type="button" onclick="setGameMode('1p')" id="mode-btn-1p" class="py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-amber-500 text-white border-amber-600 shadow-md">
+                            <span class="text-xl">👤</span>
+                            <span>משחק עצמאי</span>
+                        </button>
+                        <button type="button" onclick="setGameMode('2p')" id="mode-btn-2p" class="py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-white text-slate-700 border-slate-200 hover:border-amber-300">
+                            <span class="text-xl">👥</span>
+                            <span>משחק עם חבר</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Difficulty Select -->
+                <div class="bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 rounded-2xl border border-amber-200/70 shadow-sm flex flex-col gap-3">
+                    <label for="pair-select" class="font-extrabold text-amber-950 text-xl flex items-center gap-2">
+                        <span class="bg-amber-200 p-2 rounded-lg text-lg">🧩</span> רמת קושי (מספר זוגות):
+                    </label>
+                    <div class="relative mt-auto">
+                        <select id="pair-select" class="w-full bg-white border-2 border-amber-200 text-amber-900 text-base rounded-xl px-4 py-3 font-bold appearance-none focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 cursor-pointer shadow-sm transition-all">
+                            <option value="6">6 זוגות (קל ומהיר)</option>
+                            <option value="8">8 זוגות</option>
+                            <option value="12" selected>12 זוגות (מומלץ)</option>
+                            <option value="16">16 זוגות (מאתגר)</option>
+                            <option value="23">כל 23 התמונות (אלוף הזיכרון)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center px-4 text-amber-800">
+                            <svg class="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toggles Section -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Timer Toggle -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <label for="toggle-timer" class="font-bold text-slate-700 cursor-pointer flex items-center gap-2 text-lg">
+                        <span class="text-xl">🕒</span> מדידת זמן
+                    </label>
+                    <div class="relative inline-block w-12 align-middle select-none">
+                        <input type="checkbox" name="toggle" id="toggle-timer" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-all duration-300"/>
+                        <label for="toggle-timer" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label>
+                    </div>
+                </div>
+
+                <!-- Moves Toggle -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <label for="toggle-moves" class="font-bold text-slate-700 cursor-pointer flex items-center gap-2 text-lg">
+                        <span class="text-xl">🎯</span> ספירת מהלכים
+                    </label>
+                    <div class="relative inline-block w-12 align-middle select-none">
+                        <input type="checkbox" name="toggle" id="toggle-moves" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-all duration-300"/>
+                        <label for="toggle-moves" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label>
+                    </div>
+                </div>
+
+                <!-- Audio Toggle -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <label for="toggle-sound" class="font-bold text-slate-700 cursor-pointer flex items-center gap-2 text-lg">
+                        <span class="text-xl">🔊</span> צלילים ואפקטים
+                    </label>
+                    <div class="relative inline-block w-12 align-middle select-none">
+                        <input type="checkbox" name="toggle" id="toggle-sound" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-all duration-300"/>
+                        <label for="toggle-sound" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-300"></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Continue Button to Screen 2 -->
+            <button onclick="goToScreen2()" class="w-full sm:w-2/3 mx-auto mt-2 px-8 py-5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-600 hover:via-amber-500 hover:to-yellow-600 text-white font-extrabold text-xl sm:text-2xl rounded-2xl shadow-xl shadow-amber-500/30 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-3 cursor-pointer">
+                <span>להמשך: בחירת תמונות</span>
+                <span class="text-2xl">➔</span>
+            </button>
+        </div>
+
+        <!-- SCREEN 2: IMAGE SELECTION -->
+        <div id="screen-2" class="hidden bg-white/80 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 shadow-2xl border border-white/60 flex-col gap-6 my-auto relative">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-amber-100 pb-4">
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-950 flex items-center gap-2">
+                        <span>🖼️</span> בחירת התמונות למשחק
+                    </h2>
+                    <p class="text-amber-800/80 font-bold text-sm mt-1">
+                        נבחרו <span id="selected-count-badge" class="bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md">12</span> מתוך <span id="target-count-badge" class="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md">12</span> תמונות
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="selectAllItems(true)" id="select-max-btn" class="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-sm rounded-xl transition-colors border border-amber-300 shadow-sm cursor-pointer">
+                        בחר 12 תמונות
+                    </button>
+                    <button onclick="selectAllItems(false)" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors border border-slate-300 shadow-sm cursor-pointer">
+                        נקה הכל
+                    </button>
+                </div>
+            </div>
+
+            <!-- Items Selection Grid -->
+            <div id="items-grid-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-96 overflow-y-auto p-1 custom-scroll">
+                <!-- Dynamically filled with icons -->
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2 border-t border-amber-100 pt-5">
+                <button onclick="goToScreen1()" class="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-lg rounded-xl border border-slate-300 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <span>⬅️</span>
+                    <span>חזרה להגדרות</span>
+                </button>
+                <button onclick="startGame()" class="w-full sm:w-2/3 px-8 py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-black text-xl rounded-2xl shadow-lg shadow-amber-500/30 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-3 cursor-pointer">
+                    <span>🚀 להתחלת המשחק</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SCREEN 3: GAME BOARD -->
+        <div id="screen-3" class="hidden flex-col gap-4 my-auto relative z-10">
+            <!-- Stats Dashboard Bar -->
+            <div class="bg-white/95 backdrop-blur-md rounded-2xl p-3 sm:p-4 shadow-lg border border-amber-200 flex flex-wrap items-center justify-between gap-3 text-sm sm:text-base font-bold text-slate-700">
+                <div class="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto justify-center">
+                    
+                    <!-- 1 Player Stats -->
+                    <div id="p1-stats-group" class="flex items-center gap-3">
+                        <div id="moves-stat-box" class="flex items-center gap-2 bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl text-amber-900 shadow-sm">
+                            <span class="text-lg">🎯</span>
+                            <span>מהלכים:</span>
+                            <span id="moves-counter" class="font-black text-amber-700 text-xl w-6 text-center">0</span>
+                        </div>
+
+                        <div id="timer-stat-box" class="flex items-center gap-2 bg-blue-50 border border-blue-100 px-4 py-2 rounded-xl text-blue-900 shadow-sm">
+                            <span class="text-lg">🕒</span>
+                            <span>זמן:</span>
+                            <span id="timer-display" class="font-black text-blue-700 text-xl w-14 text-center">00:00</span>
+                        </div>
+
+                        <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl text-emerald-900 shadow-sm">
+                            <span class="text-lg">⭐</span>
+                            <span>התאמות:</span>
+                            <span class="font-black text-emerald-700 text-xl tracking-widest">
+                                <span id="matches-counter">0</span>/<span id="total-pairs-target">0</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 2 Players Scoreboard -->
+                    <div id="p2-stats-group" class="hidden flex-wrap items-center gap-3">
+                        <div id="player1-badge" class="flex items-center gap-2 bg-amber-100 border-2 border-amber-400 px-4 py-2 rounded-xl text-amber-950 shadow-sm transition-all">
+                            <span class="text-lg">👤</span>
+                            <span>שחקן 1:</span>
+                            <span id="p1-score" class="font-black text-amber-800 text-xl">0</span>
+                        </div>
+                        <div id="player2-badge" class="flex items-center gap-2 bg-slate-100 border-2 border-slate-300 px-4 py-2 rounded-xl text-slate-700 shadow-sm transition-all opacity-60">
+                            <span class="text-lg">👥</span>
+                            <span>שחקן 2:</span>
+                            <span id="p2-score" class="font-black text-slate-800 text-xl">0</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Game Actions -->
+                <div class="flex items-center justify-center gap-2 w-full sm:w-auto">
+                    <button onclick="resetCurrentGame()" title="אתחול מחדש" class="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl transition-colors border border-amber-300 flex items-center gap-2 font-bold shadow-sm cursor-pointer">
+                        <span class="text-lg">🔄</span>
+                        <span class="hidden sm:inline">משחק חדש</span>
+                    </button>
+                    <button onclick="goToScreen2()" title="בחירת תמונות" class="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl transition-colors border border-amber-200 flex items-center gap-2 font-bold shadow-sm cursor-pointer">
+                        <span class="text-lg">🖼️</span>
+                        <span class="hidden sm:inline">תמונות</span>
+                    </button>
+                    <button onclick="goToScreen1()" title="הגדרות" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition-colors border border-slate-300 flex items-center gap-2 font-bold shadow-sm cursor-pointer">
+                        <span class="text-lg">⚙️</span>
+                        <span class="hidden sm:inline">הגדרות</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Cards Grid Container -->
+            <div id="board-grid" class="grid gap-2 sm:gap-3 lg:gap-4 justify-center my-auto py-4 mx-auto w-full max-w-[95%]">
+                <!-- Dynamic memory cards inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Win Victory Modal Popup -->
+    <div id="win-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-[2rem] p-6 sm:p-10 max-w-md w-full shadow-2xl border-4 border-amber-400 text-center flex flex-col items-center gap-5 transform scale-95 transition-transform duration-300" id="win-modal-content">
+            <div class="w-24 h-24 bg-gradient-to-br from-amber-100 to-yellow-200 rounded-full flex items-center justify-center text-5xl shadow-inner border-2 border-amber-300 animate-bounce relative">
+                👑
+                <div class="absolute -right-2 -top-2 text-3xl">✨</div>
+                <div class="absolute -left-2 -bottom-2 text-2xl">🎉</div>
+            </div>
+            
+            <div class="space-y-1">
+                <h2 id="win-title" class="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-yellow-500 drop-shadow-sm">כל הכבוד!</h2>
+                <h3 class="text-2xl font-bold text-amber-900">חג שמח ושנה טובה!</h3>
+            </div>
+            
+            <p id="win-subtitle" class="text-slate-600 font-semibold text-base bg-slate-50 p-3 rounded-xl border border-slate-100">
+                הצלחתם למצוא את כל זוגות הכרטיסים!
+            </p>
+            
+            <!-- Modal Stats Summary -->
+            <div id="modal-stats-container" class="w-full bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-200 text-amber-950 font-bold flex flex-col gap-3 text-base sm:text-lg shadow-inner">
+                <!-- Dynamic Stats inserted here -->
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="flex gap-3 w-full mt-2">
+                <button onclick="closeModalAndReplay()" class="flex-1 py-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-black text-lg rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer">
+                    🎮 שחקו שוב
+                </button>
+                <button onclick="closeModalAndSetup()" class="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg rounded-xl border border-slate-300 shadow-sm hover:shadow transition-all cursor-pointer">
+                    ⚙️ להגדרות
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Array containing all 23 Tishrei items with custom image links
+        const TISHREI_ITEMS = [
+            { id: 1, name: "תפוח בדבש", bg: "bg-red-50", img: "https://i.ibb.co/vxyC3BWc/apple-and-honey.png" },
+            { id: 2, name: "תפוח בדבש 2", bg: "bg-amber-50", img: "https://i.ibb.co/PsX5BTS4/apple-and-honey-2.png" },
+            { id: 3, name: "תפוח בדבש 3", bg: "bg-yellow-50", img: "https://i.ibb.co/k2sk7Lyv/apple-and-honey-3.png" },
+            { id: 4, name: "ערבה", bg: "bg-emerald-50", img: "https://i.ibb.co/Mxbf5xzP/arava.png" },
+            { id: 5, name: "דבורה", bg: "bg-amber-50", img: "https://i.ibb.co/dwX49pSC/bee.png" },
+            { id: 6, name: "תוקע בשופר", bg: "bg-amber-100", img: "https://i.ibb.co/dwGS80SV/Blowing-the-shofar.png" },
+            { id: 7, name: "אתרוג", bg: "bg-yellow-100", img: "https://i.ibb.co/PGzBz6pt/etrog.png" },
+            { id: 8, name: "ראש של דג", bg: "bg-blue-50", img: "https://i.ibb.co/M4w3nnB/fish-head.png" },
+            { id: 9, name: "הדס", bg: "bg-green-50", img: "https://i.ibb.co/G3FnhyD1/hadas.png" },
+            { id: 10, name: "סוכות שמח", bg: "bg-lime-50", img: "https://i.ibb.co/Z6h1TGWR/happy-sukot.png" },
+            { id: 11, name: "דבש", bg: "bg-amber-100", img: "https://i.ibb.co/JwSVxdDD/honey.png" },
+            { id: 12, name: "חלת דבש", bg: "bg-yellow-50", img: "https://i.ibb.co/q3vD4c0q/honeycomb.png" },
+            { id: 13, name: "לולב", bg: "bg-emerald-100", img: "https://i.ibb.co/YBRSC1DX/lulav.png" },
+            { id: 14, name: "רימון", bg: "bg-rose-50", img: "https://i.ibb.co/G4NTdR86/rimon.png" },
+            { id: 15, name: "שנה טובה", bg: "bg-amber-50", img: "https://i.ibb.co/DgMV355N/shana-tova.png" },
+            { id: 16, name: "שופר", bg: "bg-orange-50", img: "https://i.ibb.co/20x0t25S/shofar.png" },
+            { id: 17, name: "סוכה", bg: "bg-amber-50", img: "https://i.ibb.co/C538W70y/suka.png" },
+            { id: 18, name: "סוכה 2", bg: "bg-yellow-50", img: "https://i.ibb.co/Cs6v0J1k/suka-2.png" },
+            { id: 19, name: "סוכה 3", bg: "bg-orange-50", img: "https://i.ibb.co/YBHC9JQ8/suka-3.png" },
+            { id: 20, name: "קישוט לסוכה", bg: "bg-purple-50", img: "https://i.ibb.co/zHCV5GLL/Sukkah-decoration.png" },
+            { id: 21, name: "קישוט לסוכה 2", bg: "bg-amber-50", img: "https://i.ibb.co/Fb3Lc9ZG/Sukkah-decoration-2.png" },
+            { id: 22, name: "קישוט לסוכה 3", bg: "bg-pink-50", img: "https://i.ibb.co/wF1znd3x/Sukkah-decoration-3.png" },
+            { id: 23, name: "ארבעת המינים", bg: "bg-emerald-50", img: "https://i.ibb.co/7dWq8DkT/The-Four-Species.png" }
+        ];
+
+        let selectedItemIds = TISHREI_ITEMS.map(i => i.id);
+        let currentGameMode = '1p'; // '1p' or '2p'
+        let activePlayer = 1; // 1 or 2
+        let p1Score = 0;
+        let p2Score = 0;
+
+        let currentDeck = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let totalPairs = 0;
+        let movesCount = 0;
+        let secondsElapsed = 0;
+        let timerInterval = null;
+        let isBoardLocked = false;
+        let audioContext = null;
+
+        // Custom Error Toast Function
+        function showToast(msg) {
+            document.getElementById('toast-text').innerText = msg;
+            const toast = document.getElementById('toast-message');
+            toast.classList.remove('-translate-y-[150%]', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.add('-translate-y-[150%]', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3500);
+        }
+
+        function getAudioContext() {
+            if (!audioContext) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) audioContext = new AudioCtx();
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            return audioContext;
+        }
+
+        function playMatchAudio() {
+            if (!document.getElementById('toggle-sound').checked) return;
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime;
+            const frequencies = [523.25, 659.25, 783.99, 1046.50]; 
+
+            frequencies.forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                gain.gain.setValueAtTime(0, now + idx * 0.08);
+                gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.08 + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + idx * 0.08);
+                osc.stop(now + idx * 0.08 + 0.4);
+            });
+        }
+
+        function playMismatchAudio() {
+            if (!document.getElementById('toggle-sound').checked) return;
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime;
+            const osc1 = ctx.createOscillator();
+            const osc2 = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc1.type = 'sine'; osc2.type = 'sine';
+            osc1.frequency.setValueAtTime(300, now);
+            osc1.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+            osc2.frequency.setValueAtTime(240, now);
+            osc2.frequency.exponentialRampToValueAtTime(160, now + 0.3);
+
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+            osc1.connect(gain); osc2.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc1.start(now); osc2.start(now);
+            osc1.stop(now + 0.35); osc2.stop(now + 0.35);
+        }
+
+        function playVictoryAudio() {
+            if (!document.getElementById('toggle-sound').checked) return;
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime;
+            const chord = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+            chord.forEach((freq) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.15, now + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.start(now); osc.stop(now + 2.0);
+            });
+        }
+
+        function triggerWinConfetti() {
+            if (typeof confetti === 'function') {
+                const end = Date.now() + (3.5 * 1000);
+                const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#facc15'];
+
+                (function frame() {
+                    confetti({
+                        particleCount: 6, angle: 60, spread: 55, origin: { x: 0 }, colors: colors, zIndex: 2000
+                    });
+                    confetti({
+                        particleCount: 6, angle: 120, spread: 55, origin: { x: 1 }, colors: colors, zIndex: 2000
+                    });
+
+                    if (Date.now() < end) {
+                        requestAnimationFrame(frame);
+                    }
+                }());
+            }
+        }
+
+        function setGameMode(mode) {
+            currentGameMode = mode;
+            const btn1p = document.getElementById('mode-btn-1p');
+            const btn2p = document.getElementById('mode-btn-2p');
+
+            if (mode === '1p') {
+                btn1p.className = "py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-amber-500 text-white border-amber-600 shadow-md";
+                btn2p.className = "py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-white text-slate-700 border-slate-200 hover:border-amber-300";
+            } else {
+                btn2p.className = "py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-amber-500 text-white border-amber-600 shadow-md";
+                btn1p.className = "py-3 px-4 rounded-xl border-2 font-bold text-lg transition-all flex flex-col items-center justify-center gap-1 bg-white text-slate-700 border-slate-200 hover:border-amber-300";
+            }
+        }
+
+        function goToScreen1() {
+            clearInterval(timerInterval);
+            document.getElementById('screen-1').classList.remove('hidden');
+            document.getElementById('screen-2').classList.add('hidden');
+            document.getElementById('screen-2').classList.remove('flex');
+            document.getElementById('screen-3').classList.add('hidden');
+            document.getElementById('screen-3').classList.remove('flex');
+        }
+
+        function goToScreen2() {
+            const targetPairs = parseInt(document.getElementById('pair-select').value);
+            
+            // Adjust selection to match the selected level requirement
+            if (selectedItemIds.length > targetPairs) {
+                selectedItemIds = selectedItemIds.slice(0, targetPairs);
+            } else if (selectedItemIds.length < targetPairs) {
+                const unselected = TISHREI_ITEMS.filter(i => !selectedItemIds.includes(i.id));
+                const needed = targetPairs - selectedItemIds.length;
+                selectedItemIds = [...selectedItemIds, ...unselected.slice(0, needed).map(i => i.id)];
+            }
+
+            renderItemsSelectionGrid();
+            document.getElementById('screen-1').classList.add('hidden');
+            document.getElementById('screen-2').classList.remove('hidden');
+            document.getElementById('screen-2').classList.add('flex');
+            document.getElementById('screen-3').classList.add('hidden');
+            document.getElementById('screen-3').classList.remove('flex');
+        }
+
+        function renderItemsSelectionGrid() {
+            const container = document.getElementById('items-grid-container');
+            container.innerHTML = '';
+
+            const targetPairs = parseInt(document.getElementById('pair-select').value);
+            const selectedCount = selectedItemIds.length;
+
+            document.getElementById('selected-count-badge').textContent = selectedCount;
+            document.getElementById('target-count-badge').textContent = targetPairs;
+            document.getElementById('select-max-btn').textContent = `בחר ${targetPairs} תמונות`;
+
+            TISHREI_ITEMS.forEach(item => {
+                const isChecked = selectedItemIds.includes(item.id);
+                const isMaxReached = !isChecked && selectedCount >= targetPairs;
+                const label = document.createElement('label');
+                
+                label.className = `flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden group ${
+                    isChecked 
+                    ? 'bg-amber-100/90 border-amber-400 shadow-md transform scale-[1.02]' 
+                    : isMaxReached
+                    ? 'bg-slate-50 border-slate-200 opacity-50 hover:border-slate-300'
+                    : 'bg-white border-slate-200 opacity-75 hover:opacity-100 hover:border-amber-200'
+                }`;
+
+                label.innerHTML = `
+                    <div class="absolute top-2 right-2 z-20">
+                        <input type="checkbox" value="${item.id}" ${isChecked ? 'checked' : ''} 
+                               onchange="toggleItemSelect(${item.id})" 
+                               class="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500 accent-amber-600 cursor-pointer">
+                    </div>
+                    <div class="w-12 h-12 mb-1 mt-2 transform group-hover:scale-110 transition-transform flex items-center justify-center">
+                        <img src="${item.img}" alt="${item.name}" class="w-full h-full object-contain pointer-events-none" />
+                    </div>
+                    <span class="text-xs sm:text-sm font-bold text-center leading-tight ${isChecked ? 'text-amber-950' : 'text-slate-600'}">${item.name}</span>
+                `;
+                container.appendChild(label);
+            });
+        }
+
+        function toggleItemSelect(id) {
+            const targetPairs = parseInt(document.getElementById('pair-select').value);
+
+            if (selectedItemIds.includes(id)) {
+                selectedItemIds = selectedItemIds.filter(itemId => itemId !== id);
+            } else {
+                if (selectedItemIds.length >= targetPairs) {
+                    showToast(`כבר נבחרו ${targetPairs} תמונות! לבחירת תמונה זו יש להסיר תמונה אחרת.`);
+                    renderItemsSelectionGrid();
+                    return;
+                }
+                selectedItemIds.push(id);
+            }
+            renderItemsSelectionGrid();
+        }
+
+        function selectAllItems(shouldSelect) {
+            const targetPairs = parseInt(document.getElementById('pair-select').value);
+            if (shouldSelect) {
+                selectedItemIds = TISHREI_ITEMS.slice(0, targetPairs).map(i => i.id);
+            } else {
+                selectedItemIds = [];
+            }
+            renderItemsSelectionGrid();
+        }
+
+        function startGame() {
+            getAudioContext();
+
+            const targetPairs = parseInt(document.getElementById('pair-select').value);
+
+            if (selectedItemIds.length < targetPairs) {
+                showToast(`יש לבחור בדיוק ${targetPairs} תמונות למשחק! (נבחרו כעת ${selectedItemIds.length})`);
+                return;
+            }
+
+            const availableItems = TISHREI_ITEMS.filter(item => selectedItemIds.includes(item.id));
+            totalPairs = availableItems.length;
+
+            // Setup display mode
+            if (currentGameMode === '1p') {
+                document.getElementById('p1-stats-group').style.display = 'flex';
+                document.getElementById('p2-stats-group').style.display = 'none';
+                document.getElementById('timer-stat-box').style.display = document.getElementById('toggle-timer').checked ? 'flex' : 'none';
+                document.getElementById('moves-stat-box').style.display = document.getElementById('toggle-moves').checked ? 'flex' : 'none';
+            } else {
+                document.getElementById('p1-stats-group').style.display = 'none';
+                document.getElementById('p2-stats-group').style.display = 'flex';
+                activePlayer = 1;
+                p1Score = 0;
+                p2Score = 0;
+                update2PlayerTurnDisplay();
+            }
+
+            // Shuffle and slice pool
+            const shuffledPool = [...availableItems].sort(() => Math.random() - 0.5);
+            const selectedPool = shuffledPool.slice(0, totalPairs);
+
+            // Create Deck
+            currentDeck = [];
+            selectedPool.forEach(item => {
+                currentDeck.push({ ...item, uniqueId: Math.random() });
+                currentDeck.push({ ...item, uniqueId: Math.random() });
+            });
+            
+            currentDeck.sort(() => Math.random() - 0.5);
+
+            setupGameBoard();
+            
+            // Switch to Screen 3
+            document.getElementById('screen-1').classList.add('hidden');
+            document.getElementById('screen-2').classList.add('hidden');
+            document.getElementById('screen-2').classList.remove('flex');
+            document.getElementById('screen-3').classList.remove('hidden');
+            document.getElementById('screen-3').classList.add('flex');
+            
+            resetGameStats();
+            if (currentGameMode === '1p') startTimer();
+        }
+
+        function update2PlayerTurnDisplay() {
+            document.getElementById('p1-score').innerText = p1Score;
+            document.getElementById('p2-score').innerText = p2Score;
+            
+            const b1 = document.getElementById('player1-badge');
+            const b2 = document.getElementById('player2-badge');
+
+            if (activePlayer === 1) {
+                b1.className = "flex items-center gap-2 bg-amber-200 border-2 border-amber-500 px-4 py-2 rounded-xl text-amber-950 shadow-md font-extrabold scale-105 transition-all";
+                b2.className = "flex items-center gap-2 bg-slate-100 border-2 border-slate-300 px-4 py-2 rounded-xl text-slate-700 shadow-sm opacity-60 transition-all";
+            } else {
+                b2.className = "flex items-center gap-2 bg-amber-200 border-2 border-amber-500 px-4 py-2 rounded-xl text-amber-950 shadow-md font-extrabold scale-105 transition-all";
+                b1.className = "flex items-center gap-2 bg-slate-100 border-2 border-slate-300 px-4 py-2 rounded-xl text-slate-700 shadow-sm opacity-60 transition-all";
+            }
+        }
+
+        function setupGameBoard() {
+            const board = document.getElementById('board-grid');
+            board.innerHTML = '';
+            
+            const totalCards = currentDeck.length;
+            board.className = 'grid gap-2 sm:gap-3 lg:gap-4 justify-center my-auto py-2 mx-auto w-full max-w-[95%]';
+            
+            if (totalCards <= 12) {
+                board.classList.add('grid-cols-3', 'sm:grid-cols-4');
+            } else if (totalCards <= 20) {
+                board.classList.add('grid-cols-4', 'sm:grid-cols-5');
+            } else if (totalCards <= 32) {
+                board.classList.add('grid-cols-4', 'sm:grid-cols-6', 'md:grid-cols-8');
+            } else {
+                board.classList.add('grid-cols-5', 'sm:grid-cols-7', 'md:grid-cols-8', 'lg:grid-cols-10');
+            }
+
+            currentDeck.forEach((cardItem) => {
+            const cardEl = document.createElement('div');
+            cardEl.className = 'card-container aspect-square sm:aspect-[4/5] w-full max-w-[97px] mx-auto';
+            
+            cardEl.innerHTML = `
+                <div class="card-inner shadow-md rounded-2xl">
+                        <div class="card-front"></div>
+                        <div class="card-back ${cardItem.bg} flex flex-col items-center justify-center p-2 rounded-2xl relative overflow-hidden">
+                            <img src="${cardItem.img}" alt="${cardItem.name}" class="w-full h-full object-contain p-1 relative z-10 pointer-events-none" />
+                        </div>
+                    </div>
+                `;
+                
+                cardEl.addEventListener('click', () => handleCardClick(cardEl, cardItem));
+                board.appendChild(cardEl);
+            });
+        }
+
+        function handleCardClick(cardElement, item) {
+            if (isBoardLocked || cardElement.classList.contains('flipped') || cardElement.classList.contains('matched')) return;
+
+            cardElement.classList.add('flipped');
+            flippedCards.push({ element: cardElement, item: item });
+
+            if (flippedCards.length === 2) {
+                movesCount++;
+                document.getElementById('moves-counter').innerText = movesCount;
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            isBoardLocked = true;
+            const [card1, card2] = flippedCards;
+
+            if (card1.item.id === card2.item.id) {
+                // Match found!
+                matchedPairs++;
+                document.getElementById('matches-counter').innerText = matchedPairs;
+                
+                if (currentGameMode === '2p') {
+                    if (activePlayer === 1) p1Score++;
+                    else p2Score++;
+                    update2PlayerTurnDisplay();
+                }
+
+                playMatchAudio();
+                
+                card1.element.classList.add('matched');
+                card2.element.classList.add('matched');
+                flippedCards = [];
+                isBoardLocked = false;
+
+                if (matchedPairs === totalPairs) {
+                    setTimeout(endGame, 500);
+                }
+            } else {
+                // Mismatch
+                playMismatchAudio();
+                setTimeout(() => {
+                    card1.element.classList.remove('flipped');
+                    card2.element.classList.remove('flipped');
+                    flippedCards = [];
+                    
+                    if (currentGameMode === '2p') {
+                        activePlayer = activePlayer === 1 ? 2 : 1;
+                        update2PlayerTurnDisplay();
+                    }
+                    
+                    isBoardLocked = false;
+                }, 1000);
+            }
+        }
+
+        function resetGameStats() {
+            matchedPairs = 0;
+            movesCount = 0;
+            secondsElapsed = 0;
+            flippedCards = [];
+            isBoardLocked = false;
+            
+            document.getElementById('matches-counter').innerText = '0';
+            document.getElementById('total-pairs-target').innerText = totalPairs;
+            document.getElementById('moves-counter').innerText = '0';
+            updateTimerDisplay();
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            if (document.getElementById('toggle-timer').checked) {
+                timerInterval = setInterval(() => {
+                    secondsElapsed++;
+                    updateTimerDisplay();
+                }, 1000);
+            }
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+            const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+            document.getElementById('timer-display').innerText = `${mins}:${secs}`;
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            playVictoryAudio();
+            triggerWinConfetti();
+            
+            const statsContainer = document.getElementById('modal-stats-container');
+            const titleEl = document.getElementById('win-title');
+            const subtitleEl = document.getElementById('win-subtitle');
+
+            let statsHtml = '';
+
+            if (currentGameMode === '2p') {
+                if (p1Score > p2Score) {
+                    titleEl.innerText = '🥇 שחקן 1 ניצח!';
+                    subtitleEl.innerText = `שחקן 1 מוביל עם ${p1Score} התאמות!`;
+                } else if (p2Score > p1Score) {
+                    titleEl.innerText = '🥇 שחקן 2 ניצח!';
+                    subtitleEl.innerText = `שחקן 2 מוביל עם ${p2Score} התאמות!`;
+                } else {
+                    titleEl.innerText = '🤝 תיקו!';
+                    subtitleEl.innerText = `שני השחקנים הגיעו ל-${p1Score} התאמות!`;
+                }
+
+                statsHtml = `
+                    <div class="flex justify-between items-center bg-white/60 p-3 rounded-xl border border-amber-200">
+                        <span>שחקן 1:</span> <span class="font-black text-amber-700 text-xl">${p1Score} זוגות</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-white/60 p-3 rounded-xl border border-amber-200">
+                        <span>שחקן 2:</span> <span class="font-black text-amber-700 text-xl">${p2Score} זוגות</span>
+                    </div>
+                `;
+            } else {
+                titleEl.innerText = 'כל הכבוד!';
+                subtitleEl.innerText = 'הצלחתם למצוא את כל זוגות הכרטיסים של חודש תשרי!';
+
+                statsHtml = `
+                    <div class="flex justify-between items-center bg-white/60 p-2.5 rounded-xl">
+                        <span>מספר זוגות:</span> <span class="font-black text-amber-600">${totalPairs}</span>
+                    </div>
+                `;
+                if (document.getElementById('toggle-moves').checked) {
+                    statsHtml += `
+                        <div class="flex justify-between items-center bg-white/60 p-2.5 rounded-xl">
+                            <span>מהלכים:</span> <span class="font-black text-amber-600">${movesCount}</span>
+                        </div>
+                    `;
+                }
+                if (document.getElementById('toggle-timer').checked) {
+                    statsHtml += `
+                        <div class="flex justify-between items-center bg-white/60 p-2.5 rounded-xl">
+                            <span>זמן משחק:</span> <span class="font-black text-amber-600">${document.getElementById('timer-display').innerText}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            statsContainer.innerHTML = statsHtml;
+
+            // Display Modal
+            const modal = document.getElementById('win-modal');
+            const content = document.getElementById('win-modal-content');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.classList.add('opacity-100');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function hideWinModal() {
+            const modal = document.getElementById('win-modal');
+            const content = document.getElementById('win-modal-content');
+            
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 300);
+        } 
+
+        function closeModalAndReplay() {
+            hideWinModal();
+            setTimeout(startGame, 300);
+        }
+
+        function closeModalAndSetup() {
+            hideWinModal();
+            setTimeout(goToScreen1, 300);
+        }
+
+        function resetCurrentGame() {
+            clearInterval(timerInterval);
+            startGame();
+        }
+    </script>
+</body>
+</html>
